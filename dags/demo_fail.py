@@ -2,6 +2,7 @@ from datetime import datetime
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
+from airflow.sensors.filesystem import FileSensor
 
 # Fails on purpose: the upstream file never arrived. Used to test triage.
 with DAG(
@@ -12,15 +13,12 @@ with DAG(
     default_args={"retries": 1, "retry_delay": 5},
     tags=["demo"],
 ) as dag:
-    check_file = BashOperator(
+    check_file = FileSensor(
         task_id="check_input_file",
-        bash_command=(
-            "f=/data/incoming/orders_{{ ds }}.csv; "
-            "echo \"looking for $f\"; "
-            "if [ ! -f \"$f\" ]; then "
-            "echo \"ERROR: FileNotFoundError: input file $f not found (upstream export from billing-system did not arrive)\"; "
-            "exit 1; fi"
-        ),
+        filepath="/data/incoming/orders_{{ ds }}.csv",
+        mode="reschedule",
+        poke_interval=300,
+        timeout=3600,
     )
     load = BashOperator(task_id="load_orders", bash_command="echo 'loading'")
     check_file >> load
